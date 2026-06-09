@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-linux:
-    name: Build Linux ${{ matrix.label }} binary (Ubuntu 26.04)
+    name: Build Linux ${{ matrix.label }} AppImage (Ubuntu 26.04)
     runs-on: ${{ matrix.runner }}
     container:
       image: ubuntu:26.04
@@ -23,10 +23,12 @@ jobs:
         include:
           - runner: ubuntu-latest
             label: x86_64
-            archive_name: muon-pdf-linux-x86_64.tar.gz
+            linuxdeploy_arch: x86_64
+            appimage_name: muon-pdf-linux-x86_64.AppImage
           - runner: ubuntu-24.04-arm
             label: aarch64
-            archive_name: muon-pdf-linux-aarch64.tar.gz
+            linuxdeploy_arch: aarch64
+            appimage_name: muon-pdf-linux-aarch64.AppImage
 
     steps:
       - name: Install build dependencies from Ubuntu repo
@@ -34,8 +36,11 @@ jobs:
           apt-get update
           apt-get install -y \
             build-essential \
+            file \
             git \
+            patchelf \
             pkg-config \
+            wget \
             zig0.15 \
             libgtk-4-dev \
             libmupdf-dev
@@ -46,26 +51,52 @@ jobs:
       - name: Build release binary
         run: make ZIG=zig0.15 ARCH=native OPT=ReleaseSmall STATIC=false
 
-      - name: Package release tarball
+      - name: Package AppImage
         run: |
-          mkdir -p dist
-          cp zig-out/bin/muon-pdf dist/
-          cp muon-pdf.desktop dist/
-          cp packaging/release/install.sh dist/
-          cp packaging/release/uninstall.sh dist/
-          cp README.md dist/
-          cp LICENSE dist/
-          chmod +x dist/install.sh dist/uninstall.sh
-          tar -czf "${{ matrix.archive_name }}" -C dist .
-          sha256sum "${{ matrix.archive_name }}" > "${{ matrix.archive_name }}.sha256"
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          cp zig-out/bin/muon-pdf AppDir/usr/bin/
+          cp muon-pdf.desktop AppDir/usr/share/applications/muon-pdf.desktop
+          if ! grep -q '^Icon=' AppDir/usr/share/applications/muon-pdf.desktop; then
+            printf '\nIcon=muon-pdf\n' >> AppDir/usr/share/applications/muon-pdf.desktop
+          fi
+          # 1x1 fallback icon so AppImage metadata remains valid.
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=' | base64 -d > AppDir/usr/share/icons/hicolor/256x256/apps/muon-pdf.png
+
+          wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.linuxdeploy_arch }}.AppImage" -O linuxdeploy.AppImage
+          wget -q "https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk.sh" -O linuxdeploy-plugin-gtk.sh
+          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-gtk.sh
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy.AppImage \
+            --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/muon-pdf.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/muon-pdf.png \
+            --plugin gtk \
+            --output appimage
+
+          generated_appimage=""
+          for f in *.AppImage; do
+            if [ "$f" != "linuxdeploy.AppImage" ]; then
+              generated_appimage="$f"
+              break
+            fi
+          done
+          if [ -z "$generated_appimage" ]; then
+            echo "No AppImage generated."
+            exit 1
+          fi
+
+          mv "$generated_appimage" "${{ matrix.appimage_name }}"
+          sha256sum "${{ matrix.appimage_name }}" > "${{ matrix.appimage_name }}.sha256"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: muon-pdf-linux-${{ matrix.label }}
           path: |
-            ${{ matrix.archive_name }}
-            ${{ matrix.archive_name }}.sha256
+            ${{ matrix.appimage_name }}
+            ${{ matrix.appimage_name }}.sha256
 
       - name: Upload assets to GitHub Release
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
@@ -74,5 +105,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           overwrite_files: true
           files: |
-            ${{ matrix.archive_name }}
-            ${{ matrix.archive_name }}.sha256
+            ${{ matrix.appimage_name }}
+            ${{ matrix.appimage_name }}.sha256

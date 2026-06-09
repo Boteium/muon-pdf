@@ -40,16 +40,6 @@ Built for performance reading: fast page turns, zero distraction. Drag-to-move i
 | pan down | tap `v` | click `v` | `Down`, `j` |
 | quit app | tap menu `☰`, then `Quit` | click menu `☰`, then `Quit` | `q` |
 
-## Install pre-built release
-
-Download a release tarball for your architecture (`x86_64` or `aarch64`), then run:
-
-```bash
-tar -xzf muon-pdf-linux-<arch>.tar.gz
-cd <extracted-folder>
-./install.sh
-```
-
 ## Build from source
 
 ```bash
@@ -74,6 +64,16 @@ Set as default PDF app from CLI:
 xdg-mime default muon-pdf.desktop application/pdf
 ```
 
+## Run pre-built AppImage
+
+AppImage is provided for convenience, but it is **not lightweight** compared to the native compiled build. 
+
+If you still want the portable AppImage, download the release for your architecture (`x86_64` or `aarch64`) and run:
+
+```bash
+chmod +x muon-pdf-linux-<arch>.AppImage
+./muon-pdf-linux-<arch>.AppImage
+```
 
 ---
 
