@@ -53,42 +53,7 @@ jobs:
 
       - name: Package AppImage
         run: |
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          cp zig-out/bin/muon-pdf AppDir/usr/bin/
-          cp muon-pdf.desktop AppDir/usr/share/applications/muon-pdf.desktop
-          if ! grep -q '^Icon=' AppDir/usr/share/applications/muon-pdf.desktop; then
-            printf '\nIcon=muon-pdf\n' >> AppDir/usr/share/applications/muon-pdf.desktop
-          fi
-          # 1x1 fallback icon so AppImage metadata remains valid.
-          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=' | base64 -d > AppDir/usr/share/icons/hicolor/256x256/apps/muon-pdf.png
-
-          wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.linuxdeploy_arch }}.AppImage" -O linuxdeploy.AppImage
-          wget -q "https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk.sh" -O linuxdeploy-plugin-gtk.sh
-          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-gtk.sh
-
-          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy.AppImage \
-            --appdir AppDir \
-            --desktop-file AppDir/usr/share/applications/muon-pdf.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/muon-pdf.png \
-            --plugin gtk \
-            --output appimage
-
-          generated_appimage=""
-          for f in *.AppImage; do
-            if [ "$f" != "linuxdeploy.AppImage" ]; then
-              generated_appimage="$f"
-              break
-            fi
-          done
-          if [ -z "$generated_appimage" ]; then
-            echo "No AppImage generated."
-            exit 1
-          fi
-
-          mv "$generated_appimage" "${{ matrix.appimage_name }}"
-          sha256sum "${{ matrix.appimage_name }}" > "${{ matrix.appimage_name }}.sha256"
+          bash packaging/appimage/build-appimage.sh "${{ matrix.linuxdeploy_arch }}" "${{ matrix.appimage_name }}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
