@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=muon-pdf
+Comment=Minimal touch-first PDF viewer
+Exec=muon-pdf %f
+Terminal=false
+Categories=Office;Viewer;
+MimeType=application/pdf;
+NoDisplay=false
