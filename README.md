@@ -12,31 +12,6 @@ Built for performance reading: fast page turns, zero distraction. Drag-to-move i
 
 **Screenshot**  
 <a href="./screenshot1.png"><img src="screenshot1.png" alt="muon-pdf screenshot" width="50%" /></a>
-
-## Build and Run
-
-```bash
-make
-./zig-out/bin/muon-pdf
-```
-
-## Install to system
-
-```bash
-make
-sudo make install
-```
-
-This installs:
-- `/usr/bin/muon-pdf`
-- `/usr/share/applications/muon-pdf.desktop`
-
-Set as default PDF app from CLI:
-
-```bash
-xdg-mime default muon-pdf.desktop application/pdf
-```
-
 ## User Interface
 
 ### Screen Tap Zones
@@ -64,6 +39,41 @@ xdg-mime default muon-pdf.desktop application/pdf
 | pan up | tap `^` | click `^` | `Up`, `k` |
 | pan down | tap `v` | click `v` | `Down`, `j` |
 | quit app | tap menu `☰`, then `Quit` | click menu `☰`, then `Quit` | `q` |
+
+## Install pre-built release
+
+Download a release tarball for your architecture (`x86_64` or `aarch64`), then run:
+
+```bash
+tar -xzf muon-pdf-linux-<arch>.tar.gz
+cd <extracted-folder>
+./install.sh
+```
+
+## Build from source
+
+```bash
+make
+./zig-out/bin/muon-pdf
+```
+
+## Install from source
+
+```bash
+make
+sudo make install
+```
+
+This installs:
+- `/usr/bin/muon-pdf`
+- `/usr/share/applications/muon-pdf.desktop`
+
+Set as default PDF app from CLI:
+
+```bash
+xdg-mime default muon-pdf.desktop application/pdf
+```
+
 
 ---
 

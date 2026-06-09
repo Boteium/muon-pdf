@@ -2,6 +2,9 @@ name: Binary Release
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "*"
   release:
     types: [published]
 
@@ -45,8 +48,11 @@ jobs:
           mkdir -p dist
           cp zig-out/bin/muon-pdf dist/
           cp muon-pdf.desktop dist/
+          cp packaging/release/install.sh dist/
+          cp packaging/release/uninstall.sh dist/
           cp README.md dist/
           cp LICENSE dist/
+          chmod +x dist/install.sh dist/uninstall.sh
           tar -czf "${{ matrix.archive_name }}" -C dist .
           sha256sum "${{ matrix.archive_name }}" > "${{ matrix.archive_name }}.sha256"
 
@@ -59,9 +65,11 @@ jobs:
             ${{ matrix.archive_name }}.sha256
 
       - name: Upload assets to GitHub Release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          overwrite_files: true
           files: |
             ${{ matrix.archive_name }}
             ${{ matrix.archive_name }}.sha256
