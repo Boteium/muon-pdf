@@ -1,0 +1,67 @@
+name: Binary Release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux ${{ matrix.label }} binary
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            label: x86_64
+            archive_name: muon-pdf-linux-x86_64.tar.gz
+          - runner: ubuntu-24.04-arm
+            label: aarch64
+            archive_name: muon-pdf-linux-aarch64.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-4-dev libmupdf-dev
+
+      - name: Build release binary
+        run: make ARCH=native OPT=ReleaseSmall STATIC=false
+
+      - name: Package release tarball
+        run: |
+          mkdir -p dist
+          cp zig-out/bin/muon-pdf dist/
+          cp muon-pdf.desktop dist/
+          cp README.md dist/
+          cp LICENSE dist/
+          tar -czf "${{ matrix.archive_name }}" -C dist .
+          sha256sum "${{ matrix.archive_name }}" > "${{ matrix.archive_name }}.sha256"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: muon-pdf-linux-${{ matrix.label }}
+          path: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256
+
+      - name: Upload assets to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256

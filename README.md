@@ -10,6 +10,9 @@ Built for performance reading: fast page turns, zero distraction. Drag-to-move i
 - keyboard and mouse friendly
 - ultra lightweight
 
+**Screenshot**  
+<a href="./screenshot1.png"><img src="screenshot1.png" alt="muon-pdf screenshot" width="50%" /></a>
+
 ## Build and Run
 
 ```bash
