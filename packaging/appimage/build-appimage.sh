@@ -24,6 +24,7 @@ APPDIR="$WORK_DIR/AppDir"
 APP_NAME="muon-pdf"
 DESKTOP_FILE="$ROOT_DIR/muon-pdf.desktop"
 BIN_FILE="$ROOT_DIR/zig-out/bin/$APP_NAME"
+SOURCE_ICON_FILE="$ROOT_DIR/icon/256x256.png"
 ICON_FILE="$APPDIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
 
 if [[ ! -f "$BIN_FILE" ]]; then
@@ -36,6 +37,11 @@ if [[ ! -f "$DESKTOP_FILE" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$SOURCE_ICON_FILE" ]]; then
+  echo "Missing icon file: $SOURCE_ICON_FILE"
+  exit 1
+fi
+
 rm -rf "$WORK_DIR"
 mkdir -p "$APPDIR/usr/bin"
 mkdir -p "$APPDIR/usr/share/applications"
@@ -43,13 +49,17 @@ mkdir -p "$(dirname -- "$ICON_FILE")"
 
 cp "$BIN_FILE" "$APPDIR/usr/bin/$APP_NAME"
 cp "$DESKTOP_FILE" "$APPDIR/usr/share/applications/$APP_NAME.desktop"
+cp "$SOURCE_ICON_FILE" "$ICON_FILE"
 
 if ! grep -q '^Icon=' "$APPDIR/usr/share/applications/$APP_NAME.desktop"; then
   printf '\nIcon=%s\n' "$APP_NAME" >> "$APPDIR/usr/share/applications/$APP_NAME.desktop"
 fi
 
-# 1x1 fallback icon keeps AppImage metadata valid.
-printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=' | base64 -d > "$ICON_FILE"
+icon_mime_type="$(file -b --mime-type "$ICON_FILE")"
+if [[ "$icon_mime_type" != "image/png" ]]; then
+  echo "Icon file is not a valid PNG: $ICON_FILE ($icon_mime_type)"
+  exit 1
+fi
 
 pushd "$WORK_DIR" >/dev/null
 

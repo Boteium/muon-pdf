@@ -1355,7 +1355,10 @@ pub fn main() !void {
         state.open_on_activate = try cstrDup(allocator, args[1]);
     }
 
-    const app = c.gtk_application_new("com.hamal.muonpdf", c.G_APPLICATION_FLAGS_NONE);
+    c.g_set_prgname("muon-pdf");
+    c.g_set_application_name("muon-pdf");
+
+    const app = c.gtk_application_new("com.muonpdf", c.G_APPLICATION_FLAGS_NONE);
     if (app == null) return error.GtkInitFailed;
     defer c.g_object_unref(app);
     state.gtk_app = app;

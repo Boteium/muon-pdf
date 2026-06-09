@@ -6,7 +6,9 @@ STATIC ?= false
 PREFIX ?= /usr
 BINDIR ?= $(PREFIX)/bin
 APPDIR ?= $(PREFIX)/share/applications
+ICONDIR ?= $(PREFIX)/share/icons/hicolor/256x256/apps
 DESKTOP_FILE := muon-pdf.desktop
+ICON_FILE := icon/256x256.png
 
 TARGET_native :=
 TARGET_amd64 := x86_64-linux-musl
@@ -45,10 +47,12 @@ install:
 	$(BUILD_CMD)
 	install -Dm755 zig-out/bin/$(APP) "$(DESTDIR)$(BINDIR)/$(APP)"
 	install -Dm644 $(DESKTOP_FILE) "$(DESTDIR)$(APPDIR)/$(DESKTOP_FILE)"
+	install -Dm644 $(ICON_FILE) "$(DESTDIR)$(ICONDIR)/$(APP).png"
 
 uninstall:
 	rm -f "$(DESTDIR)$(BINDIR)/$(APP)"
 	rm -f "$(DESTDIR)$(APPDIR)/$(DESKTOP_FILE)"
+	rm -f "$(DESTDIR)$(ICONDIR)/$(APP).png"
 
 clean:
 	rm -rf .zig-cache zig-out
