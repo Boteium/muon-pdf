@@ -50,6 +50,10 @@ Why dynamic by default:
 - static GTK4 stack is usually unavailable in distro setups
 - dynamic build is the practical and reliable default on this environment
 
+AppImage (built on Ubuntu via `packaging/appimage/build-appimage.sh`):
+- prefers the host distro's GTK4 when installed (better Wayland/X11 integration)
+- falls back to the bundled GTK stack on minimal systems without gtk4
+
 ## 4. App startup flow
 
 Entry:
