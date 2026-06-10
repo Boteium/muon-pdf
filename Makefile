@@ -1,6 +1,7 @@
 APP := muon-pdf
 ZIG ?= zig
 ARCH ?= native
+CPU ?=
 OPT ?= ReleaseSmall
 STATIC ?= false
 PREFIX ?= /usr
@@ -32,6 +33,9 @@ PKG_CONFIG_CMD := pkg-config
 endif
 
 BUILD_CMD = PKG_CONFIG="$(PKG_CONFIG_CMD)" $(ZIG) build $(COMMON_FLAGS) $(TARGET_ARG)
+ifneq ($(strip $(CPU)),)
+BUILD_CMD += -Dcpu=$(CPU)
+endif
 
 .PHONY: all build run clean install uninstall
 
