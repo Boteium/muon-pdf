@@ -42,6 +42,8 @@ Built for performance reading: fast page turns, zero distraction. Drag-to-move i
 
 ## Build from source
 
+Builds with Zig 0.15 and 0.16 (system `gtk4` and `mupdf` dev packages required).
+
 ```bash
 make
 ./zig-out/bin/muon-pdf

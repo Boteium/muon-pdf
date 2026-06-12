@@ -1,9 +1,13 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const c = @cImport({
-    @cInclude("gtk/gtk.h");
-    @cInclude("gdk/gdkkeysyms.h");
-    @cInclude("mupdf/fitz.h");
+    // The shim headers declare the GTK/GLib and MuPDF surface this app
+    // uses; zig 0.16's translate-c cannot handle the real <gtk/gtk.h> and
+    // <mupdf/fitz.h> yet (see the comments in the shims).
+    @cInclude("gtk_shim.h");
+    @cInclude("mupdf_shim.h");
+    @cInclude("stdlib.h"); // realpath, free
 });
 
 const PersistedState = struct {
@@ -106,42 +110,53 @@ fn dropDocument(state: *AppState) void {
     state.current_page = 0;
 }
 
+// File system and clock access goes through GLib/libc rather than std.fs and
+// std.time: zig 0.16 reworked those around the new std.Io interface, while
+// the C APIs are identical on every zig version this project supports.
 fn resolveAbsolutePath(allocator: std.mem.Allocator, in_path: []const u8) ![]u8 {
-    return try std.fs.cwd().realpathAlloc(allocator, in_path);
+    const in_z = try allocator.dupeZ(u8, in_path);
+    defer allocator.free(in_z);
+    const resolved = c.realpath(in_z.ptr, null) orelse return error.FileNotFound;
+    defer c.free(resolved);
+    return try allocator.dupe(u8, std.mem.span(resolved));
 }
 
 fn computeCachePath(allocator: std.mem.Allocator, abs_pdf_path: []const u8) ![]u8 {
-    const home = std.posix.getenv("HOME") orelse return error.MissingHome;
+    const home_c = c.g_getenv("HOME") orelse return error.MissingHome;
+    const home = std.mem.span(home_c);
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(abs_pdf_path, &digest, .{});
     const hash_hex = std.fmt.bytesToHex(digest, .lower);
 
-    const cache_dir = try std.fs.path.join(allocator, &.{ home, ".cache", "muon-pdf" });
-    defer allocator.free(cache_dir);
-    try std.fs.cwd().makePath(cache_dir);
+    // Trailing NUL included so .ptr can go straight to C; the slice is
+    // temporary and never used as a string on the Zig side.
+    const cache_dir_z = try std.fmt.allocPrint(allocator, "{s}/.cache/muon-pdf\x00", .{home});
+    defer allocator.free(cache_dir_z);
+    if (c.g_mkdir_with_parents(cache_dir_z.ptr, 0o755) != 0) return error.CacheDirUnavailable;
 
-    const filename = try std.fmt.allocPrint(allocator, "{s}.json", .{hash_hex});
-    defer allocator.free(filename);
-    return try std.fs.path.join(allocator, &.{ cache_dir, filename });
+    return try std.fmt.allocPrint(allocator, "{s}/.cache/muon-pdf/{s}.json", .{ home, hash_hex });
 }
 
 fn loadPersistedState(state: *AppState) PersistedState {
     const cache_path = state.current_cache_path orelse return .{};
-    const file = std.fs.cwd().openFile(cache_path, .{}) catch return .{};
-    defer file.close();
+    const path_z = state.allocator.dupeZ(u8, cache_path) catch return .{};
+    defer state.allocator.free(path_z);
 
-    const data = file.readToEndAlloc(state.allocator, 16 * 1024) catch return .{};
-    defer state.allocator.free(data);
+    var contents: [*c]u8 = null;
+    var length: c.gsize = 0;
+    if (c.g_file_get_contents(path_z.ptr, &contents, &length, null) == 0) return .{};
+    defer c.g_free(contents);
+    if (length > 16 * 1024) return .{};
 
-    const parsed = std.json.parseFromSlice(PersistedState, state.allocator, data, .{}) catch return .{};
+    const parsed = std.json.parseFromSlice(PersistedState, state.allocator, contents[0..length], .{}) catch return .{};
     defer parsed.deinit();
     return parsed.value;
 }
 
 fn savePersistedState(state: *AppState) void {
     const cache_path = state.current_cache_path orelse return;
-    var file = std.fs.cwd().createFile(cache_path, .{ .truncate = true }) catch return;
-    defer file.close();
+    const path_z = state.allocator.dupeZ(u8, cache_path) catch return;
+    defer state.allocator.free(path_z);
 
     const serialized = std.fmt.allocPrint(
         state.allocator,
@@ -149,7 +164,12 @@ fn savePersistedState(state: *AppState) void {
         .{ state.current_page, state.zoom, state.pan_x, state.pan_y, state.rotate_turns },
     ) catch return;
     defer state.allocator.free(serialized);
-    file.writeAll(serialized) catch {};
+    _ = c.g_file_set_contents(path_z.ptr, serialized.ptr, @intCast(serialized.len), null);
+}
+
+// Monotonic milliseconds; only ever compared against itself for debouncing.
+fn nowMs() i64 {
+    return @divTrunc(c.g_get_monotonic_time(), 1000);
 }
 
 fn getCurrentPageRect(state: *AppState) !c.fz_rect {
@@ -468,7 +488,7 @@ fn pageNext(state: *AppState) void {
         notifyBlockedAction(state, "Last page");
         return;
     }
-    const now = std.time.milliTimestamp();
+    const now = nowMs();
     if (now - state.last_page_nav_ms < 135) return;
     state.last_page_nav_ms = now;
     goToPagePreserveCenter(state, state.current_page + 1);
@@ -479,7 +499,7 @@ fn pagePrev(state: *AppState) void {
         notifyBlockedAction(state, "First page");
         return;
     }
-    const now = std.time.milliTimestamp();
+    const now = nowMs();
     if (now - state.last_page_nav_ms < 135) return;
     state.last_page_nav_ms = now;
     goToPagePreserveCenter(state, state.current_page - 1);
@@ -1043,7 +1063,7 @@ fn isTapInControlSafeZone(state: *AppState, x: f64, y: f64, view_w: f64, view_h:
 fn onPressed(gesture: ?*c.GtkGestureClick, n_press: c.gint, x: c.gdouble, y: c.gdouble, user_data: ?*anyopaque) callconv(.c) void {
     if (gesture == null or user_data == null) return;
     const state: *AppState = @ptrCast(@alignCast(user_data.?));
-    const now = std.time.milliTimestamp();
+    const now = nowMs();
     if (now < state.suppress_tap_until_ms) {
         return;
     }
@@ -1135,7 +1155,7 @@ fn onSwipeDragEnd(_: ?*c.GtkGestureDrag, offset_x: c.gdouble, offset_y: c.gdoubl
         } else {
             pagePrev(state);
         }
-        state.suppress_tap_until_ms = std.time.milliTimestamp() + 160;
+        state.suppress_tap_until_ms = nowMs() + 160;
     } else if (ay >= ax * dominance_ratio) {
         // Natural vertical swipe mapping.
         if (y < 0) {
@@ -1143,7 +1163,7 @@ fn onSwipeDragEnd(_: ?*c.GtkGestureDrag, offset_x: c.gdouble, offset_y: c.gdoubl
         } else {
             pagePrev(state);
         }
-        state.suppress_tap_until_ms = std.time.milliTimestamp() + 160;
+        state.suppress_tap_until_ms = nowMs() + 160;
     } else {
         return;
     }
@@ -1340,19 +1360,41 @@ fn freeState(state: *AppState) void {
     }
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+// Zig 0.16 removed std.process.argsAlloc; command line arguments are now
+// passed to main via std.process.Init.Minimal. Keep one entry point per
+// compiler generation; lazy analysis means only the selected one is compiled.
+const zig_has_process_init =
+    builtin.zig_version.order(.{ .major = 0, .minor = 16, .patch = 0 }) != .lt;
+
+pub const main = if (zig_has_process_init) mainZig016 else mainZig015;
+
+fn mainZig015() !void {
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
+    try appMain(allocator, if (args.len > 1) args[1] else null);
+}
+
+fn mainZig016(init: std.process.Init.Minimal) !void {
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var args = init.args.iterate();
+    _ = args.skip();
+    try appMain(allocator, args.next());
+}
+
+fn appMain(allocator: std.mem.Allocator, open_path: ?[]const u8) !void {
     var state = AppState{ .allocator = allocator };
     defer freeState(&state);
 
-    if (args.len > 1) {
-        state.open_on_activate = try cstrDup(allocator, args[1]);
+    if (open_path) |path| {
+        state.open_on_activate = try cstrDup(allocator, path);
     }
 
     c.g_set_prgname("muon-pdf");

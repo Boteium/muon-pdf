@@ -7,7 +7,10 @@ pub fn build(b: *std.Build) void {
         "optimize",
         "Optimization mode (default ReleaseSmall)",
     ) orelse .ReleaseSmall;
-    const static_link = b.option(bool, "static", "Prefer static linking") orelse true;
+    // Default to dynamic: system gtk4/mupdf are usually only available as
+    // shared libs, and zig 0.16+ errors out (instead of silently falling
+    // back) when linkage is static but a needed lib is shared-only.
+    const static_link = b.option(bool, "static", "Prefer static linking") orelse false;
 
     const exe = b.addExecutable(.{
         .name = "muon-pdf",
@@ -20,18 +23,19 @@ pub fn build(b: *std.Build) void {
     });
     exe.linkage = if (static_link) .static else .dynamic;
     exe.root_module.strip = true;
+    exe.root_module.addIncludePath(b.path("src"));
 
-    exe.linkSystemLibrary2("gtk4", .{
+    exe.root_module.linkSystemLibrary("gtk4", .{
         .needed = true,
         .preferred_link_mode = if (static_link) .static else .dynamic,
         .use_pkg_config = .force,
     });
-    exe.linkSystemLibrary2("mupdf", .{
+    exe.root_module.linkSystemLibrary("mupdf", .{
         .needed = true,
         .preferred_link_mode = if (static_link) .static else .dynamic,
         .use_pkg_config = .force,
     });
-    exe.linkSystemLibrary("m");
+    exe.root_module.linkSystemLibrary("m", .{});
 
     b.installArtifact(exe);
 
